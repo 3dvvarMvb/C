@@ -27,54 +27,51 @@ int main() {
     cout << "Ingrese el número de jugadores: ";
     cin >> n;
 
-    int time = generarNumeroAleatorio(n - 1, n);
+    // Crear el FIFO si no existe
+    mkfifo(fifo_path, 0666);
 
-    // Creación de procesos
+    // Abrir el FIFO para escritura
+    fd = open(fifo_path, O_WRONLY);
+
+    // Escribir el número de jugadores
+    write(fd, &n, sizeof(n));
+
+    // Creación de procesos hijos
     pid_t pids[n];
-    pids[0] = getpid();
+    pids[0] = getpid();  // El padre
 
     for (int i = 1; i < n; i++) {
         pid_t pid = fork();  // Crear un nuevo proceso
-
         if (pid < 0) {
-            // Error en la creación del proceso
             cerr << "Error en fork" << endl;
             exit(1);
         } 
         else if (pid == 0) {
-            // Este bloque es ejecutado solo por el proceso hijo
+            // Proceso hijo
             cout << "Soy el proceso hijo " << i + 1 << " con PID " << getpid() << endl;
             
-            // Realizar una tarea específica (por ejemplo, dormir un segundo)
-            sleep(1);
+            // Generar un voto aleatorio y escribir en el FIFO
+            int voto = generarNumeroAleatorio(1, n);
+            write(fd, &voto, sizeof(voto));
+
+            exit(0);  // Importante para que el hijo termine aquí
         } 
         else {
-            // Este bloque es ejecutado solo por el proceso padre
-            cout << "Soy el proceso padre con PID " << getpid() << endl;
+            // Proceso padre
             pids[i] = pid;  // Guardar el PID del proceso hijo en el arreglo
         }
     }
 
-    int voto;
-
-    // Votos de los jugadores
-    for (int i = 0; i < time; i++) {
-        mkfifo(fifo_path, 0666);
-        fd = open(fifo_path, O_WRONLY);
-        int votacion = generarNumeroAleatorio(0, n - 1);
-
-        voto=votacion;
-
-        write(fd, &voto, sizeof(voto));
-        write(fd, &n, sizeof(n));
-
-        sleep (5);
-
-        // Cerrar el descriptor de archivo
-        close(fd);
-
+    // Esperar a que todos los hijos terminen
+    for (int i = 1; i < n; i++) {
+        waitpid(pids[i], NULL, 0);
     }
+
+    // Cerrar el descriptor de archivo
+    close(fd);
+
     // Eliminar el FIFO después de usarlo
-        unlink(fifo_path);
+    unlink(fifo_path);
+
     return 0;
 }

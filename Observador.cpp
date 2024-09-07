@@ -18,26 +18,24 @@ const char *fifo_path = "./my_fifo";
 // Función para inicializar el mapa con n jugadores, todos con un conteo de 0 votos
 map<int, int> inicializarMapa(int n) {
     map<int, int> jugadores;  
-
     for (int i = 1; i <= n; ++i) {
         jugadores[i] = 0;  
     }
-
     return jugadores;  
 }
 
-// Función para encontrar la clave con el valor mas grande en un mapa
+// Función para encontrar la clave con el valor más grande en un mapa
 int encontrarMaximo(const map<int, int> &jugadores) {
     if (jugadores.empty()) {
         cerr << "El mapa está vacío." << endl;
         return -1; 
     }
 
-    //valores minimos
+    // Valores mínimos
     int claveMaxima = -1;  
     int valorMaximo = INT_MIN;  
 
-    // Recorremos el mapa para encontrar el valor maximo
+    // Recorremos el mapa para encontrar el valor máximo
     for (const auto &par : jugadores) {
         if (par.second > valorMaximo) {
             valorMaximo = par.second;  
@@ -45,7 +43,7 @@ int encontrarMaximo(const map<int, int> &jugadores) {
         }
     }
 
-    return claveMaxima;  // Retornamos la clave con el valor maximo de votos
+    return claveMaxima;  // Retornamos la clave con el valor máximo de votos
 }
 
 int main(){
@@ -66,7 +64,7 @@ int main(){
     map<int, int> votos = inicializarMapa(n);
 
     // Leer los votos del FIFO
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < n ; i++) {  
         read(fd, &voto, sizeof(voto));
         votos[voto]++;
     }
