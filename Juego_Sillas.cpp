@@ -9,11 +9,10 @@
 #include <sys/stat.h>
 #include <cerrno>
 
-#define FIFO_PATH "/tmp/mi_fifo"
+const char *fifo_path = "./my_fifo";
+int fd;
 
 using namespace std;
-
-volatile int votos[26];
 
 // Función para generar un número aleatorio en un rango dado [min, max]
 int generarNumeroAleatorio(int min, int max) {
@@ -48,7 +47,6 @@ int main() {
             
             // Realizar una tarea específica (por ejemplo, dormir un segundo)
             sleep(1);
-            exit(0);
         } 
         else {
             // Este bloque es ejecutado solo por el proceso padre
@@ -57,17 +55,26 @@ int main() {
         }
     }
 
+    int voto;
+
     // Votos de los jugadores
     for (int i = 0; i < time; i++) {
+        mkfifo(fifo_path, 0666);
+        fd = open(fifo_path, O_WRONLY);
         int votacion = generarNumeroAleatorio(0, n - 1);
-        votos[i] = votacion;
-        sleep(2);
-        for (int i = 0; i < n; i++)
-        {
-            cout<<votos[i]<<" "<<"voto: "<<i<<" Votador: "<<getpid()<<endl;
-        }
-        
-    }
 
+        voto=votacion;
+
+        write(fd, &voto, sizeof(voto));
+        write(fd, &n, sizeof(n));
+
+        sleep (5);
+
+        // Cerrar el descriptor de archivo
+        close(fd);
+
+    }
+    // Eliminar el FIFO después de usarlo
+        unlink(fifo_path);
     return 0;
 }
