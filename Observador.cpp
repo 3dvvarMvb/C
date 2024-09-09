@@ -81,5 +81,8 @@ int main(){
     close(fd);
     unlink(fifo_path);
 
+    if(time==0){
     return 0;
+    }
+    main();
 }
