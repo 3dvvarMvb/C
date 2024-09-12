@@ -13,7 +13,8 @@
 
 using namespace std;
 
-const char *fifo_path = "./my_fifo";
+const char *fifo_path1 = "./my_fifo1"; //Escritura
+const char *fifo_path2 = "./my_fifo2"; //Lectura
 
 // Función para inicializar el mapa con n jugadores, todos con un conteo de 0 votos
 map<int, int> inicializarMapa(int n) {
@@ -47,25 +48,26 @@ int encontrarMaximo(const map<int, int> &jugadores) {
 }
 
 int main(){
-    int fd;
+    int fd[2];
     int voto;
     int n;
 
     // Crear el FIFO si no existe
-    mkfifo(fifo_path, 0666);
+    mkfifo(fifo_path1, 0666);
+    mkfifo(fifo_path2, 0666);
 
     // Abrir el FIFO en modo lectura
-    fd = open(fifo_path, O_RDONLY);
+    fd[1] = open(fifo_path2, O_RDONLY);
 
     // Leer el número de jugadores desde el FIFO
-    read(fd, &n, sizeof(n));
+    read(fd[1], &n, sizeof(n));
 
     // Inicializar el mapa de votos
     map<int, int> votos = inicializarMapa(n);
 
     // Leer los votos del FIFO
     for (int i = 0; i < n ; i++) {  
-        read(fd, &voto, sizeof(voto));
+        read(fd[1], &voto, sizeof(voto));
         votos[voto]++;
     }
 
@@ -77,12 +79,23 @@ int main(){
         cout << "El jugador con la mayor cantidad de votos es: Jugador " << jugadorConMasVotos << endl;
     }
 
-    // Cerrar y eliminar el FIFO
-    close(fd);
-    unlink(fifo_path);
+    // Cierro lectura
+    close(fd[1]);
 
-    if(time==0){
+    // Escribir jugador con mas votos 
+    fd[0] = open(fifo_path1, O_WRONLY);
+    write(fd[0],&jugadorConMasVotos, sizeof(jugadorConMasVotos));
+    
+    n--;//
+
+    write(fd[0],&n, sizeof(n));
+
+    //cierro escritura
+    close(fd[0]);
+
+    unlink(fifo_path1);
+    unlink(fifo_path2);
+
+    exit(0);
     return 0;
-    }
-    main();
 }

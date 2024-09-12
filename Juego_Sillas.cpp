@@ -76,6 +76,11 @@ int main() {
         waitpid(pids[i], NULL, 0);
     }
 
+    read(fd[1],&n, sizeof(n));
+    
+    //cierro lectura
+    close(fd[1]);
+
     if(pids[jugadorConMasVotos] == getpid()){
         execlp("./Se_Amurra","",NULL);
     };
@@ -83,6 +88,8 @@ int main() {
     // Eliminar el FIFO después de usarlo
     unlink(fifo_path1);
     unlink(fifo_path2);
+
+    exit(0);
 
     return 0;
 }
