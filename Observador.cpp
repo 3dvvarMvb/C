@@ -1,20 +1,18 @@
 #include <iostream>
 #include <cstdlib>
-#include <ctime>
 #include <unistd.h>
 #include <sys/types.h>
-#include <sys/wait.h>
-#include <cstring>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <cerrno>
 #include <map>
 #include <climits>
+#include <cstring>
 
 using namespace std;
 
-const char *fifo_path1 = "./my_fifo1"; //Escritura
-const char *fifo_path2 = "./my_fifo2"; //Lectura
+const char *fifo_path1 = "./my_fifo1"; // Lectura de los votos
+const char *fifo_path2 = "./my_fifo2"; // Escritura del resultado
 
 // Función para inicializar el mapa con n jugadores, todos con un conteo de 0 votos
 map<int, int> inicializarMapa(int n) {
@@ -47,55 +45,85 @@ int encontrarMaximo(const map<int, int> &jugadores) {
     return claveMaxima;  // Retornamos la clave con el valor máximo de votos
 }
 
-int main(){
-    int fd[2];
+int main() {
+    int fd_read, fd_write;
     int voto;
     int n;
 
-    // Crear el FIFO si no existe
-    mkfifo(fifo_path1, 0666);
-    mkfifo(fifo_path2, 0666);
+    // Crear los FIFOs si no existen
+    if (mkfifo(fifo_path1, 0666) == -1 && errno != EEXIST) {
+        cerr << "Error al crear FIFO para lectura (my_fifo1): " << strerror(errno) << endl;
+        exit(EXIT_FAILURE);
+    }
 
-    // Abrir el FIFO en modo lectura
-    fd[1] = open(fifo_path2, O_RDONLY);
+    if (mkfifo(fifo_path2, 0666) == -1 && errno != EEXIST) {
+        cerr << "Error al crear FIFO para escritura (my_fifo2): " << strerror(errno) << endl;
+        exit(EXIT_FAILURE);
+    }
+
+    // Abrir el FIFO para lectura
+    fd_read = open(fifo_path1, O_RDONLY);
+    if (fd_read == -1) {
+        cerr << "Error al abrir FIFO para lectura (my_fifo1): " << strerror(errno) << endl;
+        exit(EXIT_FAILURE);
+    }
+    cout << "FIFO para lectura (my_fifo1) abierto correctamente." << endl;
 
     // Leer el número de jugadores desde el FIFO
-    read(fd[1], &n, sizeof(n));
+    if (read(fd_read, &n, sizeof(n)) != sizeof(n)) {
+        cerr << "Error al leer el número de jugadores" << endl;
+        close(fd_read);
+        exit(EXIT_FAILURE);
+    }
+    cout << "Número de jugadores leído desde FIFO (my_fifo1): " << n << endl;
 
     // Inicializar el mapa de votos
     map<int, int> votos = inicializarMapa(n);
 
     // Leer los votos del FIFO
-    for (int i = 0; i < n ; i++) {  
-        read(fd[1], &voto, sizeof(voto));
+    for (int i = 0; i < n; i++) {
+        if (read(fd_read, &voto, sizeof(voto)) != sizeof(voto)) {
+            cerr << "Error al leer el voto" << endl;
+            close(fd_read);
+            exit(EXIT_FAILURE);
+        }
         votos[voto]++;
+        cout << "Voto leído desde FIFO (my_fifo1): " << voto << endl;
     }
 
-    // Encontrar el jugador con la mayor cantidad de votos
+    close(fd_read); // Cerrar el FIFO de lectura
+    cout << "FIFO para lectura (my_fifo1) cerrado." << endl;
+
+    // Encontrar el jugador con más votos
     int jugadorConMasVotos = encontrarMaximo(votos);
 
-    // Mostrar el resultado
-    if (jugadorConMasVotos != -1) {
-        cout << "El jugador con la mayor cantidad de votos es: Jugador " << jugadorConMasVotos << endl;
+    // Abrir el FIFO para escritura
+    fd_write = open(fifo_path2, O_WRONLY);
+    if (fd_write == -1) {
+        cerr << "Error al abrir FIFO para escritura (my_fifo2): " << strerror(errno) << endl;
+        exit(EXIT_FAILURE);
     }
+    cout << "FIFO para escritura (my_fifo2) abierto correctamente." << endl;
 
-    // Cierro lectura
-    close(fd[1]);
+    // Escribir el jugador con más votos en el FIFO
+    if (write(fd_write, &jugadorConMasVotos, sizeof(jugadorConMasVotos)) != sizeof(jugadorConMasVotos)) {
+        cerr << "Error al escribir el jugador con más votos" << endl;
+        close(fd_write);
+        exit(EXIT_FAILURE);
+    }
+    cout << "Jugador con más votos escrito en FIFO (my_fifo2): " << jugadorConMasVotos << endl;
 
-    // Escribir jugador con mas votos 
-    fd[0] = open(fifo_path1, O_WRONLY);
-    write(fd[0],&jugadorConMasVotos, sizeof(jugadorConMasVotos));
-    
-    n--;//
+    // Escribir el número actualizado de jugadores en el FIFO
+    n--;  // Restar uno al número de jugadores
+    if (write(fd_write, &n, sizeof(n)) != sizeof(n)) {
+        cerr << "Error al escribir el número de jugadores restantes" << endl;
+        close(fd_write);
+        exit(EXIT_FAILURE);
+    }
+    cout << "Número de jugadores restantes escrito en FIFO (my_fifo2): " << n << endl;
 
-    write(fd[0],&n, sizeof(n));
+    close(fd_write); // Cerrar el FIFO de escritura
+    cout << "FIFO para escritura (my_fifo2) cerrado." << endl;
 
-    //cierro escritura
-    close(fd[0]);
-
-    unlink(fifo_path1);
-    unlink(fifo_path2);
-
-    exit(0);
     return 0;
 }

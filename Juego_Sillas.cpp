@@ -11,8 +11,8 @@
 
 using namespace std;
 
-const char *fifo_path1 = "./my_fifo1"; //Escritura
-const char *fifo_path2 = "./my_fifo2"; //Lectura
+const char *fifo_path1 = "./my_fifo1"; // Escritura hacia el observador
+const char *fifo_path2 = "./my_fifo2"; // Lectura desde el observador
 
 // Función para generar un número aleatorio en un rango dado [min, max]
 int generarNumeroAleatorio(int min, int max) {
@@ -20,76 +20,123 @@ int generarNumeroAleatorio(int min, int max) {
 }
 
 int main() {
-    //inicializar la semilla aleatoria con la hora actual
-    srand(time(NULL));
+    srand(time(NULL)); // Inicializar semilla aleatoria
 
-    //numero de jugadores
     int n; 
     cout << "Ingrese el número de jugadores: ";
     cin >> n;
 
-    //crear el FIFO si no existe
-    mkfifo(fifo_path1, 0666);
-    mkfifo(fifo_path2, 0666);
+    // Crear los FIFOs si no existen
+    if (mkfifo(fifo_path1, 0666) == -1 && errno != EEXIST) {
+        cerr << "Error al crear FIFO para escritura: " << strerror(errno) << endl;
+        exit(EXIT_FAILURE);
+    }
 
-    //abrir el FIFO para escritura 
-    int fd[2];
-    fd[0]=open(fifo_path1, O_WRONLY);
-    
-    //escribir el número de jugadores
-    write(fd[0], &n, sizeof(n));
+    if (mkfifo(fifo_path2, 0666) == -1 && errno != EEXIST) {
+        cerr << "Error al crear FIFO para lectura: " << strerror(errno) << endl;
+        exit(EXIT_FAILURE);
+    }
 
-    //creación de procesos hijos
+    // Abrir FIFO para escritura
+    int fd_write = open(fifo_path1, O_WRONLY);
+    if (fd_write == -1) {
+        cerr << "Error al abrir FIFO para escritura (my_fifo1): " << strerror(errno) << endl;
+        exit(EXIT_FAILURE);
+    }
+    cout << "FIFO para escritura (my_fifo1) abierto correctamente." << endl;
+
+    // Escribir el número de jugadores
+    if (write(fd_write, &n, sizeof(n)) != sizeof(n)) {
+        cerr << "Error al escribir el número de jugadores" << endl;
+        close(fd_write);
+        exit(EXIT_FAILURE);
+    }
+    cout << "Número de jugadores escrito en FIFO (my_fifo1)." << endl;
+
+    // Creación de procesos hijos
     pid_t pids[n];
     pids[0] = getpid();  // El padre
-    
-    //voto del padre
+
+    // Voto del padre
     int voto = generarNumeroAleatorio(1, n);
-    write(fd[0], &voto, sizeof(voto));
+    if (write(fd_write, &voto, sizeof(voto)) != sizeof(voto)) {
+        cerr << "Error al escribir el voto del padre" << endl;
+        close(fd_write);
+        exit(EXIT_FAILURE);
+    }
+    cout << "Voto del padre escrito en FIFO (my_fifo1)." << endl;
 
     for (int i = 1; i < n; i++) {
-        pid_t pid = fork();  // Crear un nuevo proceso
+        pid_t pid = fork();
         if (pid < 0) {
             cerr << "Error en fork" << endl;
             exit(1);
-        } 
-        else if (pid == 0) { // Proceso hijo
+        } else if (pid == 0) { // Proceso hijo
             // Generar un voto aleatorio y escribir en el FIFO
-            int voto = generarNumeroAleatorio(1, n);
-            write(fd[0], &voto, sizeof(voto));
-        } 
-        else {// Proceso padre
-            // Generar un voto aleatorio y escribir en el FIFO
-            pids[i] = pid;  // Guardar el PID del proceso hijo en el arreglo
+            voto = generarNumeroAleatorio(1, n);
+            int fd_child_write = open(fifo_path1, O_WRONLY);
+
+            if (fd_child_write == -1) {
+                cerr << "Error al abrir FIFO para escritura desde el hijo: " << strerror(errno) << endl;
+                exit(EXIT_FAILURE);
+            }
+            cout << "FIFO para escritura (my_fifo1) abierto correctamente por el hijo (PID: " << getpid() << ")." << endl;
+            
+            if (write(fd_child_write, &voto, sizeof(voto)) != sizeof(voto)) {
+                cerr << "Error al escribir el voto del hijo" << endl;
+                close(fd_child_write);
+                exit(EXIT_FAILURE);
+            }
+            cout << "Voto del hijo (PID: " << getpid() << ") escrito en FIFO (my_fifo1)." << endl;
+
+            close(fd_child_write);
+            cout << "FIFO para escritura (my_fifo1) cerrado por el hijo (PID: " << getpid() << ")." << endl;
+            break;
+
+        } else { // Proceso padre
+            pids[i] = pid;
         }
     }
-    //cierro escritura
-    close(fd[0]);
 
-    //se lee al jugador con mas votos desde el observador
+    close(fd_write); // Cerrar escritura
+    cout << "FIFO para escritura (my_fifo1) cerrado por el padre." << endl;
+
+    // Leer al jugador con más votos desde el observador
+    if(pids[0] == getpid()){
     int jugadorConMasVotos;
-    fd[1] = open(fifo_path2, O_RDONLY);
-    read(fd[1], &jugadorConMasVotos, sizeof(jugadorConMasVotos));
+    int fd_read = open(fifo_path2, O_RDONLY);
 
-    // Esperar a que todos los hijos terminen
+    if (fd_read == -1) {
+        cerr << "Error al abrir my_fifo2: " << strerror(errno) << endl;
+        exit(EXIT_FAILURE);
+    }
+    cout << "FIFO para lectura abierto correctamente." << endl;
+
+    if (read(fd_read, &jugadorConMasVotos, sizeof(jugadorConMasVotos)) != sizeof(jugadorConMasVotos)) {
+        cerr << "Error al leer el jugador con más votos" << endl;
+        close(fd_read);
+        exit(EXIT_FAILURE);
+    }
+    cout << "Jugador con más votos leído desde FIFO (my_fifo2): " << jugadorConMasVotos << endl;
+
+    // Leer el número actualizado de jugadores restantes
+    if (read(fd_read, &n, sizeof(n)) != sizeof(n)) {
+        cerr << "Error al leer el número de jugadores restantes" << endl;
+        close(fd_read);
+        exit(EXIT_FAILURE);
+    }
+    cout << "Número de jugadores restantes leído desde FIFO (my_fifo2): " << n << endl;
+
+    close(fd_read); // Cerrar lectura
+    cout << "FIFO para lectura (my_fifo2) cerrado." << endl;
+    
+    }
+    exit(0);
+
+    // Esperar a que terminen todos los hijos
     for (int i = 1; i < n; i++) {
         waitpid(pids[i], NULL, 0);
     }
-
-    read(fd[1],&n, sizeof(n));
-    
-    //cierro lectura
-    close(fd[1]);
-
-    if(pids[jugadorConMasVotos] == getpid()){
-        execlp("./Se_Amurra","",NULL);
-    };
-    
-    // Eliminar el FIFO después de usarlo
-    unlink(fifo_path1);
-    unlink(fifo_path2);
-
-    exit(0);
 
     return 0;
 }
