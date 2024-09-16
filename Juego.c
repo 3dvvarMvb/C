@@ -6,15 +6,14 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <time.h>
-#include <sys/mman.h> 
-#include <unistd.h>   
-#include <sys/stat.h> 
+#include <sys/mman.h>
+#include <sys/types.h>
 
 #define PIPE_NAME_WRITE "votos_pipe"
 
 typedef struct {
     int N;
-    int jugador_mas_votado;
+    pid_t jugadores[100];  // Arreglo de PIDs de los jugadores
     pid_t pid_mas_votado;
 } DatosCompartidos;
 
@@ -25,16 +24,15 @@ void Crear_jugadores(int N, pid_t jugadores[], pid_t pid_padre) {
         if (pid_padre == getpid()) {
             jugadores[i] = jugador;  // Crear un proceso por cada jugador
             printf("Jugador %d creado (PID: %d)\n", i + 1, jugador);
-
         } else {
-            break;
+            break;  // Salir del bucle en los hijos
         }
     }
 }
 
 void votar(int pipe_fd, int N) {
     srand(time(NULL) + getpid());
-    int voto = rand() % N;
+    int voto = rand() % N;  // Votar por uno de los jugadores restantes
     write(pipe_fd, &voto, sizeof(int));
 }
 
@@ -44,11 +42,6 @@ int main() {
     const char *name = "/mi_memoria_compartida";
     int shm_fd;
     DatosCompartidos *ptr;
-    DatosCompartidos data;
-
-    // Capturar valor desde la consola
-    printf("Introduce la cantidad de jugadores: ");
-    scanf("%d", &data.N);
 
     // Crear la memoria compartida
     shm_fd = shm_open(name, O_CREAT | O_RDWR, 0666);
@@ -67,44 +60,45 @@ int main() {
         exit(1);
     }
 
-    // Escribir el valor ingresado en la memoria compartida
-    ptr->N = data.N;
-
-    printf("Valor %d escrito en la memoria compartida.\n", ptr->N);
+    // Capturar valor desde la consola
+    int N;
+    printf("Introduce la cantidad de jugadores: ");
+    scanf("%d", &N);
+    ptr->N = N;
 
     mkfifo(PIPE_NAME_WRITE, 0666);
     int pipe_fd = open(PIPE_NAME_WRITE, O_WRONLY);
 
-    pid_t jugadores[data.N];
-    jugadores[0] = getpid();
-    
-    Crear_jugadores(data.N, jugadores, jugadores[0]);
+    pid_t pid_padre = getpid();
+    Crear_jugadores(N, ptr->jugadores, pid_padre);
 
-    while (data.N > 1) {
-        votar(pipe_fd, data.N);
+    while (ptr->N > 1) {
+        votar(pipe_fd, ptr->N);
 
-        sleep(2);
+        sleep(2);  // Aseguramos que todos los jugadores voten
 
-        data.jugador_mas_votado = ptr->jugador_mas_votado;
+        // Leer el PID del jugador más votado desde la memoria compartida
+        pid_t pid_eliminado = ptr->pid_mas_votado;
 
-        ptr->pid_mas_votado = jugadores[(data.jugador_mas_votado) - 1];
-        data.pid_mas_votado = ptr->pid_mas_votado;
-
-        if (getpid() == data.pid_mas_votado) {
-            execlp("./Se_Amurra", "", NULL);
-            exit(0);  // Asegurarse de que el proceso finaliza
+        // Si el jugador actual es el que fue votado, se termina
+        if (getpid() == pid_eliminado) {
+            execl("./Se_Amurra", "", NULL);
+            exit(0);
         }
 
-        // Reducir el número de jugadores
-        data.N--;
-        ptr->N = data.N;
+        // Esperar para la próxima ronda
+        sleep(2);
     }
 
     close(pipe_fd);
 
     // Limpiar
-    munmap(ptr, sizeof(int));
+    munmap(ptr, sizeof(DatosCompartidos));
     close(shm_fd);
+
+    if (getpid() == pid_padre) {
+        printf("¡Soy el ganador, PID: %d!\n", getpid());
+    }
 
     return 0;
 }
