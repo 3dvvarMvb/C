@@ -15,7 +15,6 @@
 typedef struct {
     int N;
     int jugador_mas_votado;
-
 } DatosCompartidos;
 
 void llenar_con_ceros(int votos[], int N) {
@@ -61,18 +60,16 @@ int main() {
     while(data.N > 1){    
         int votos[data.N]; // Inicializamos el conteo de votos
         int voto;
-        data.N = ptr->N;
 
         llenar_con_ceros(votos, data.N);
 
-        printf("numero jugadores: %d\n",data.N);
+        printf("numero jugadores: %d\n", data.N);
 
         // Leer los votos desde el pipe
         printf("Esperando votos...\n");
 
         for (int i = 0; i < data.N; i++) {
             read(pipe_fd, &voto, sizeof(int));
-            
             votos[voto]++; // Contamos el voto
         }
 
@@ -81,20 +78,25 @@ int main() {
         for (int i = 0; i < data.N; i++) {
             if (votos[i] > max_votos) {
                 max_votos = votos[i];
-                jugador_eliminado = i + 1;
+                jugador_eliminado = i + 1; // Mantén el +1 si el índice de jugadores empieza en 1
             }
         }
 
         printf("El jugador %d fue el más votado y será eliminado.\n", jugador_eliminado);
 
-        data.jugador_mas_votado=jugador_eliminado;
+        data.jugador_mas_votado = jugador_eliminado;
 
-        ptr->jugador_mas_votado=data.jugador_mas_votado;
+        // Actualizar la memoria compartida
+        ptr->jugador_mas_votado = data.jugador_mas_votado;
+
+        // Actualizar el valor de N después de eliminar un jugador
+        data.N--;
+        ptr->N = data.N;
     }
 
     close(pipe_fd);
 
-    // Limpiar.
+    // Limpiar
     munmap(ptr, sizeof(int));
     close(shm_fd);
 
